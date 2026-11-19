@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestor de Ensayos Agrícolas</title>
+<link rel="stylesheet" href="styles.css">
+<meta name="description" content="Gestor de ensayos agricolas: semillas, ensayos y evaluaciones por cultivo.">
+<meta name="theme-color" content="#2D7A3A">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+</head>
+<body>
+<header>
+  <h1>Gestor de Ensayos Agrícolas</h1>
+  <p>Semillas, ensayos y evaluaciones por cultivo - v0.3 - instalable (PWA)</p>
+</header>
+<nav>
+  <button data-tab="cultivos" class="activo">Cultivos</button>
+  <button data-tab="semillas">Semillas</button>
+  <button data-tab="ensayos">Ensayos</button>
+  <button data-tab="evaluar">Evaluar</button>
+  <button data-tab="resultados">Resultados</button>
+</nav>
+<main id="app"></main>
+
+<script src="app.js"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function() {
+    navigator.serviceWorker.register("sw.js").catch(function(err) {
+      console.warn("SW no registrado:", err);
+    });
+  });
+}
+</script>
+
+</body>
+</html>
