@@ -436,7 +436,7 @@ function formularioEnsayo(e){
       estado.cultivos.map(function(c){ return '<option value="'+c.id+'"'+(ed&&e.cultivoId===c.id?' selected':'')+'>'+esc(c.nombre)+'</option>'; }).join("")+
     '</select></div>'+
     '<div class="campo"><label>Semillas del inventario (puedes elegir varias)</label><select id="eSemillas" multiple size="4" style="min-height:92px"'+(conEval?' disabled':'')+'></select>'+
-      '<p class="muted" style="margin:2px 0 0">Toca una y luego las demás para elegir varias. Las elegidas serán los tratamientos de la planilla, junto con el testigo.</p></div>'+
+      '<p class="muted" style="margin:2px 0 0">Solo se muestran las semillas del cultivo elegido. Toca una y luego las demás para elegir varias; serán los tratamientos de la planilla, junto con el testigo.</p></div>'+
     '<div class="campo" id="cantSemillas" style="min-width:210px"></div>'+
     '<div class="campo"><label>Productor</label><input id="eProductor" value="'+esc(e.productor||"")+'" placeholder="Ej.: Fundo Demo"></div>'+
     '<div class="campo"><label>Localidad</label><input id="eLocalidad" value="'+esc(e.localidad||"")+'" placeholder="Ej.: Valle Demo"></div>'+
@@ -468,19 +468,24 @@ function conectarFormularioEnsayo(e){
   var selCultivo = document.getElementById("eCultivo");
   var selSemillas = document.getElementById("eSemillas");
   var contCant = document.getElementById("cantSemillas");
-  selSemillas.innerHTML = estado.semillas.map(function(s){
-    return '<option value="'+s.id+'">'+esc(nombreCultivo(s.cultivoId))+' · '+esc(etiquetaSemilla(s))+'</option>';
-  }).join("");
   var previas = {};
   (ed?e.semillasUsadas||[]:[]).forEach(function(su){ previas[su.semillaId] = su.cantidad||""; });
-  Array.prototype.forEach.call(selSemillas.options, function(o){
-    if(previas.hasOwnProperty(o.value)) o.selected = true;
-  });
+  function poblarSemillasSel(){
+    selSemillas.innerHTML = estado.semillas.filter(function(s){
+      return s.cultivoId===selCultivo.value || previas.hasOwnProperty(s.id);
+    }).map(function(s){
+      return '<option value="'+s.id+'">'+esc(etiquetaSemilla(s))+'</option>';
+    }).join("");
+    Array.prototype.forEach.call(selSemillas.options, function(o){
+      if(previas.hasOwnProperty(o.value)) o.selected = true;
+    });
+    pintarCantidades();
+  }
   function pintarCantidades(){
     var sel = Array.prototype.filter.call(selSemillas.options, function(o){ return o.selected; }).map(function(o){ return o.value; });
     contCant.querySelectorAll("input").forEach(function(i){ previas[i.dataset.sid] = i.value; });
     if(!sel.length){
-      contCant.innerHTML = '<label>Cantidad a usar por semilla</label><p class="muted" style="margin:2px 0 0">Sin semillas vinculadas.</p>';
+      contCant.innerHTML = '<label>Cantidad a usar por semilla</label><p class="muted" style="margin:2px 0 0">'+(selSemillas.options.length?'Sin semillas vinculadas.':'Este cultivo no tiene semillas en el inventario.')+'</p>';
       return;
     }
     contCant.innerHTML = '<label>Cantidad a usar por semilla</label>'+sel.map(function(id){
@@ -490,7 +495,8 @@ function conectarFormularioEnsayo(e){
     }).join("");
   }
   selSemillas.addEventListener("change", pintarCantidades);
-  pintarCantidades();
+  selCultivo.addEventListener("change", poblarSemillasSel);
+  poblarSemillasSel();
   function semillasElegidas(){
     return Array.prototype.filter.call(selSemillas.options, function(o){ return o.selected; }).map(function(o){
       var inp = contCant.querySelector('input[data-sid="'+o.value+'"]');
