@@ -1,4 +1,4 @@
-# Gestor de Ensayos Agrícolas — Proyecto fuente (v0.4, instalable PWA)
+# Gestor de Ensayos Agrícolas — Proyecto fuente (v0.5, instalable PWA)
 
 Aplicación web propia para gestionar ensayos agrícolas: inventario de semillas,
 fichas de ensayo, evaluaciones por parcela con variables editables por cultivo,
@@ -7,6 +7,25 @@ resultados por fecha y respaldo de datos.
 Esta versión es una PWA (aplicación web progresiva): cumple todos los requisitos
 de instalación de Chrome (verificado: sin errores de instalabilidad, funciona
 sin conexión una vez cargada).
+
+## Qué cambió en v0.5
+- Proveedores: ahora es un desplegable al registrar/editar una semilla, con lista
+  inicial Hazera, Sakata, HM Clause y Vilmorin. La lista se administra en la
+  pestaña Semillas (tarjeta "Proveedores") o desde el propio formulario con
+  "+ Agregar nuevo proveedor...".
+- Tipologías por cultivo: el campo Tipología del formulario de semilla es un
+  desplegable filtrado según el cultivo elegido:
+  - Cebolla: Rosada, Roja, Amarilla
+  - Tomate: Saladete, Redondo, Cherry
+  - Pimiento: Morrón, California, Lamuyo, Italiano Dulce, Piquillo
+  - Zanahoria: Chantenay, Nantes, Kuroda
+  - Pepinillo, Lechuga, Beterraga, Coliflor, Brócoli, Sandía y Melón: listas
+    PROPUESTAS según el rubro semillero latinoamericano (ej.: Lechuga: Iceberg,
+    Romana, Hoja, Mantecosa; Sandía: Crimson, Charleston, Mini, Sin pepitas).
+    Son editables: con "+ Agregar nueva tipología..." se puede escribir cualquier
+    otra y queda guardada en la lista de ese cultivo.
+- Migración automática: los datos ya registrados no se pierden; los proveedores y
+  tipologías escritos a mano en semillas anteriores se incorporan a las listas.
 
 ## Qué cambió en v0.4
 - Ahora TODO lo guardado se puede editar, no solo quitar:
