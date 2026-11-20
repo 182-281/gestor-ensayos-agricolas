@@ -1,7 +1,7 @@
-/* Service Worker - Gestor de Ensayos Agricolas v0.7
+/* Service Worker - Gestor de Ensayos Agricolas v0.8
    Estrategia: cache primero para los archivos de la app (funciona sin conexion).
    Los datos del usuario viven en localStorage, no pasan por este archivo. */
-var CACHE = "gestor-ensayos-v0.7";
+var CACHE = "gestor-ensayos-v0.8";
 var ARCHIVOS = [
   "./",
   "./index.html",
