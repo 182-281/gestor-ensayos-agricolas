@@ -54,6 +54,26 @@ var TIPOS_ENSAYO = ["Sin especificar","Segmentación","Caracterización","Lanzam
 var SEGMENTOS = ["Verano","Invierno","Todo el año","Otro"];
 var CONCLUSIONES = ["Pendiente","Favorable","No favorable"];
 
+/* Proveedores iniciales del rubro semillero (lista editable en la pestaña Semillas). */
+var PROVEEDORES_INICIALES = ["Hazera","Sakata","HM Clause","Vilmorin"];
+
+/* Tipologías por cultivo. Las de Cebolla, Tomate, Pimiento y Zanahoria son las que
+   indicó el usuario; las demás son una propuesta según el rubro semillero
+   latinoamericano y se pueden editar o ampliar al registrar una semilla. */
+var TIPOLOGIAS_INICIALES = {
+  "Cebolla":["Rosada","Roja","Amarilla"],
+  "Tomate":["Saladete","Redondo","Cherry"],
+  "Pimiento":["Morrón","California","Lamuyo","Italiano Dulce","Piquillo"],
+  "Zanahoria":["Chantenay","Nantes","Kuroda"],
+  "Pepinillo":["Largo tipo holandés","Rebanador americano","Encurtido (gherkin)"],
+  "Lechuga":["Iceberg","Romana","Hoja (batavia/roble)","Mantecosa"],
+  "Beterraga":["Detroit (redonda)","Cylindra (alargada)","Chioggia","Amarilla"],
+  "Coliflor":["Temprana","Mediana","Tardía"],
+  "Brócoli":["Calabrese","De brotes (sprouting)","Romanesco"],
+  "Sandía":["Redonda tipo Crimson","Alargada tipo Charleston","Mini/personal","Sin pepitas (triploide)","Pulpa amarilla"],
+  "Melón":["Cantaloupe","Honeydew (amarillo)","Piel de sapo","Charentais/Galia"]
+};
+
 function v(nombre, unidad){ return {id: slug(nombre)+"_"+Math.random().toString(36).slice(2,7), nombre: nombre, unidad: unidad||""}; }
 function slug(s){ return s.toLowerCase().replace(/[^a-z0-9]+/g,"_"); }
 function uid(){ return "id_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,7); }
@@ -61,17 +81,39 @@ function uid(){ return "id_"+Date.now().toString(36)+"_"+Math.random().toString(
 /* ---------- Estado y persistencia local ---------- */
 var CLAVE = "gestorEnsayosV1";
 var estado = cargar();
+function migrar(d){
+  if(!Array.isArray(d.semillas)) d.semillas = [];
+  if(!Array.isArray(d.ensayos)) d.ensayos = [];
+  if(!Array.isArray(d.cultivos)) d.cultivos = [];
+  if(!Array.isArray(d.proveedores)){
+    d.proveedores = PROVEEDORES_INICIALES.map(function(n){ return {id: uid(), nombre: n}; });
+  }
+  d.cultivos.forEach(function(c){
+    if(!Array.isArray(c.tipologias)) c.tipologias = (TIPOLOGIAS_INICIALES[c.nombre]||[]).slice();
+  });
+  d.semillas.forEach(function(sm){
+    if(sm.proveedor && !d.proveedores.some(function(p){ return p.nombre.toLowerCase()===sm.proveedor.toLowerCase(); })){
+      d.proveedores.push({id: uid(), nombre: sm.proveedor});
+    }
+    if(sm.tipologia){
+      var c = d.cultivos.find(function(x){ return x.id===sm.cultivoId; });
+      if(c && !c.tipologias.some(function(t){ return t.toLowerCase()===sm.tipologia.toLowerCase(); })){
+        c.tipologias.push(sm.tipologia);
+      }
+    }
+  });
+  return d;
+}
 function cargar(){
   try{
     var crudo = localStorage.getItem(CLAVE);
     if(crudo){
-      var d = JSON.parse(crudo);
-      if(!Array.isArray(d.semillas)) d.semillas = [];
-      return d;
+      return migrar(JSON.parse(crudo));
     }
   }catch(e){}
   return {
-    cultivos: CULTIVOS_INICIALES.map(function(c){ return {id: uid(), nombre: c.nombre, variables: c.variables}; }),
+    cultivos: CULTIVOS_INICIALES.map(function(c){ return {id: uid(), nombre: c.nombre, variables: c.variables, tipologias: (TIPOLOGIAS_INICIALES[c.nombre]||[]).slice()}; }),
+    proveedores: PROVEEDORES_INICIALES.map(function(n){ return {id: uid(), nombre: n}; }),
     semillas: [],
     ensayos: []
   };
@@ -134,7 +176,7 @@ function renderCultivos(){
   document.getElementById("btnAgregarCultivo").addEventListener("click", function(){
     var nombre = document.getElementById("nuevoCultivo").value.trim();
     if(!nombre) return;
-    estado.cultivos.push({id: uid(), nombre: nombre, variables: []});
+    estado.cultivos.push({id: uid(), nombre: nombre, variables: [], tipologias: (TIPOLOGIAS_INICIALES[nombre]||[]).slice()});
     guardar(); render();
   });
   activarRespaldo();
@@ -192,20 +234,98 @@ function renderSemillas(){
     });
     html += '</tbody></table></div>';
   }
+  html += '<div class="tarjeta"><h2>Proveedores</h2>'+
+    '<p class="muted">Esta lista alimenta el desplegable de proveedor al registrar una semilla. Agrega o quita proveedores aquí, o directamente desde el formulario de semilla.</p>';
+  if(estado.proveedores.length){
+    html += '<ul class="lista">';
+    estado.proveedores.forEach(function(p, i){
+      html += '<li><strong>'+esc(p.nombre)+'</strong> <button class="mini qProv" data-i="'+i+'">Quitar</button></li>';
+    });
+    html += '</ul>';
+  }
+  html += '<div class="fila">'+
+    '<div class="campo"><input id="nuevoProv" placeholder="Nombre del proveedor"></div>'+
+    '<button class="btn sec" id="btnAgregarProv">Agregar proveedor</button></div></div>';
   html += '<div class="tarjeta"><h2 id="tituloFormSem">Nueva semilla</h2><div class="fila">'+
     '<div class="campo"><label>Cultivo *</label><select id="sCultivo">'+
       estado.cultivos.map(function(c){ return '<option value="'+c.id+'">'+esc(c.nombre)+'</option>'; }).join("")+
     '</select></div>'+
     '<div class="campo"><label>Variedad *</label><input id="sVariedad" placeholder="Ej.: Variedad Demo A"></div>'+
-    '<div class="campo"><label>Proveedor</label><input id="sProveedor" placeholder="Ej.: Semillas Demo SAC"></div>'+
-    '<div class="campo"><label>Tipología</label><input id="sTipologia" placeholder="Ej.: Híbrido"></div>'+
+    '<div class="campo"><label>Proveedor</label><select id="sProveedor"></select>'+
+      '<input id="sProveedorNuevo" placeholder="Escribe el nuevo proveedor" style="display:none;margin-top:6px"></div>'+
+    '<div class="campo"><label>Tipología</label><select id="sTipologia"></select>'+
+      '<input id="sTipologiaNueva" placeholder="Escribe la nueva tipología" style="display:none;margin-top:6px"></div>'+
     '<div class="campo"><label>Lote</label><input id="sLote"></div>'+
     '<div class="campo" style="max-width:100px"><label>Stock</label><input id="sStock" inputmode="decimal"></div>'+
     '<div class="campo" style="max-width:90px"><label>Unidad</label><input id="sUnidad" placeholder="kg"></div>'+
     '<div class="campo" style="max-width:130px"><label>Código</label><input id="sCodigo" placeholder="Ej.: ENS-001"></div>'+
     '</div><div class="acciones"><button class="btn" id="crearSemilla">Agregar semilla</button> <button class="btn sec" id="cancelarSem" type="button" style="display:none">Cancelar</button></div></div>';
   app.innerHTML = html;
-  app.querySelectorAll("button.mini:not(.edSem)").forEach(function(b){
+
+  var selCultivo = document.getElementById("sCultivo");
+  var selProv = document.getElementById("sProveedor");
+  var inpProvNuevo = document.getElementById("sProveedorNuevo");
+  var selTipo = document.getElementById("sTipologia");
+  var inpTipoNueva = document.getElementById("sTipologiaNueva");
+
+  function llenarProveedores(actual){
+    var opts = '<option value="">— Sin especificar —</option>';
+    estado.proveedores.forEach(function(p){
+      opts += '<option value="'+esc(p.nombre)+'">'+esc(p.nombre)+'</option>';
+    });
+    if(actual && !estado.proveedores.some(function(p){ return p.nombre===actual; })){
+      opts += '<option value="'+esc(actual)+'">'+esc(actual)+'</option>';
+    }
+    opts += '<option value="__nuevo__">+ Agregar nuevo proveedor...</option>';
+    selProv.innerHTML = opts;
+    selProv.value = actual || "";
+    inpProvNuevo.style.display = "none";
+    inpProvNuevo.value = "";
+  }
+  function llenarTipologias(actual){
+    var c = cultivoDe(selCultivo.value);
+    var lista = c ? c.tipologias : [];
+    var opts = '<option value="">— Sin especificar —</option>';
+    lista.forEach(function(t){
+      opts += '<option value="'+esc(t)+'">'+esc(t)+'</option>';
+    });
+    if(actual && lista.indexOf(actual)<0){
+      opts += '<option value="'+esc(actual)+'">'+esc(actual)+'</option>';
+    }
+    opts += '<option value="__nueva__">+ Agregar nueva tipología...</option>';
+    selTipo.innerHTML = opts;
+    selTipo.value = actual || "";
+    inpTipoNueva.style.display = "none";
+    inpTipoNueva.value = "";
+  }
+  llenarProveedores("");
+  llenarTipologias("");
+  selProv.addEventListener("change", function(){
+    inpProvNuevo.style.display = selProv.value==="__nuevo__" ? "" : "none";
+    if(selProv.value==="__nuevo__") inpProvNuevo.focus();
+  });
+  selTipo.addEventListener("change", function(){
+    inpTipoNueva.style.display = selTipo.value==="__nueva__" ? "" : "none";
+    if(selTipo.value==="__nueva__") inpTipoNueva.focus();
+  });
+  selCultivo.addEventListener("change", function(){ llenarTipologias(""); });
+
+  document.getElementById("btnAgregarProv").addEventListener("click", function(){
+    var nombre = document.getElementById("nuevoProv").value.trim();
+    if(!nombre) return;
+    if(!estado.proveedores.some(function(p){ return p.nombre.toLowerCase()===nombre.toLowerCase(); })){
+      estado.proveedores.push({id: uid(), nombre: nombre});
+      guardar();
+    }
+    render();
+  });
+  app.querySelectorAll("button.qProv").forEach(function(b){
+    b.addEventListener("click", function(){
+      estado.proveedores.splice(+b.dataset.i,1); guardar(); render();
+    });
+  });
+
+  app.querySelectorAll("button.mini:not(.edSem):not(.qProv)").forEach(function(b){
     b.addEventListener("click", function(){
       if(confirm("¿Quitar esta semilla del inventario? Los ensayos que la usan conservarán su nombre como referencia.")){
         estado.semillas.splice(+b.dataset.i,1); guardar(); render();
@@ -218,10 +338,10 @@ function renderSemillas(){
       if(!sem) return;
       editSemId = sem.id;
       document.getElementById("tituloFormSem").textContent = "Editar semilla";
-      document.getElementById("sCultivo").value = sem.cultivoId;
+      selCultivo.value = sem.cultivoId;
+      llenarProveedores(sem.proveedor||"");
+      llenarTipologias(sem.tipologia||"");
       document.getElementById("sVariedad").value = sem.variedad||"";
-      document.getElementById("sProveedor").value = sem.proveedor||"";
-      document.getElementById("sTipologia").value = sem.tipologia||"";
       document.getElementById("sLote").value = sem.lote||"";
       document.getElementById("sStock").value = sem.stock||"";
       document.getElementById("sUnidad").value = sem.unidad||"";
@@ -235,11 +355,28 @@ function renderSemillas(){
   document.getElementById("crearSemilla").addEventListener("click", function(){
     var variedad = document.getElementById("sVariedad").value.trim();
     if(!variedad){ alert("Falta la variedad."); return; }
+    var proveedor = selProv.value;
+    if(proveedor==="__nuevo__"){
+      proveedor = inpProvNuevo.value.trim();
+      if(!proveedor){ alert("Escribe el nombre del nuevo proveedor."); return; }
+      if(!estado.proveedores.some(function(p){ return p.nombre.toLowerCase()===proveedor.toLowerCase(); })){
+        estado.proveedores.push({id: uid(), nombre: proveedor});
+      }
+    }
+    var tipologia = selTipo.value;
+    var cult = cultivoDe(selCultivo.value);
+    if(tipologia==="__nueva__"){
+      tipologia = inpTipoNueva.value.trim();
+      if(!tipologia){ alert("Escribe el nombre de la nueva tipología."); return; }
+      if(cult && !cult.tipologias.some(function(t){ return t.toLowerCase()===tipologia.toLowerCase(); })){
+        cult.tipologias.push(tipologia);
+      }
+    }
     var datos = {
-      cultivoId: document.getElementById("sCultivo").value,
+      cultivoId: selCultivo.value,
       variedad: variedad,
-      proveedor: document.getElementById("sProveedor").value.trim(),
-      tipologia: document.getElementById("sTipologia").value.trim(),
+      proveedor: proveedor,
+      tipologia: tipologia,
       lote: document.getElementById("sLote").value.trim(),
       stock: document.getElementById("sStock").value.trim(),
       unidad: document.getElementById("sUnidad").value.trim(),
@@ -596,7 +733,7 @@ function activarRespaldo(){
         if(!confirm("Restaurar reemplaza TODOS los datos actuales ("+estado.cultivos.length+" cultivos, "+estado.semillas.length+" semillas, "+estado.ensayos.length+" ensayos) por los del respaldo ("+datos.cultivos.length+" cultivos, "+datos.semillas.length+" semillas, "+datos.ensayos.length+" ensayos). ¿Continuar?")){
           input.value = ""; return;
         }
-        estado = datos;
+        estado = migrar(datos);
         guardar(); vista = null; render();
       }catch(err){
         alert("El archivo no es un respaldo válido de esta aplicación.");
