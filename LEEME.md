@@ -1,4 +1,4 @@
-# Gestor de Ensayos Agrícolas — Proyecto fuente (v0.5, instalable PWA)
+# Gestor de Ensayos Agrícolas — Proyecto fuente (v0.6, instalable PWA)
 
 Aplicación web propia para gestionar ensayos agrícolas: inventario de semillas,
 fichas de ensayo, evaluaciones por parcela con variables editables por cultivo,
@@ -7,6 +7,20 @@ resultados por fecha y respaldo de datos.
 Esta versión es una PWA (aplicación web progresiva): cumple todos los requisitos
 de instalación de Chrome (verificado: sin errores de instalabilidad, funciona
 sin conexión una vez cargada).
+
+## Qué cambió en v0.6
+- Semillas: se eliminó la tarjeta grande de Proveedores; queda solo el desplegable
+  en el formulario de semilla, con "+ Agregar nuevo proveedor..." ahí mismo.
+- Ensayos: el segmento ahora es Verano, Otoño, Invierno o Primavera; el campo
+  "Especificaciones de segmento" sigue para detallar. Los ensayos que tenían otro
+  valor de segmento lo conservan al editarlos.
+- Consumo de semilla por ensayo: al crear o editar un ensayo se puede indicar la
+  "Cantidad de semilla a usar" de la semilla vinculada. La tabla del inventario
+  muestra el stock total y, al costado, la columna "Restante" (stock menos lo
+  usado en todos los ensayos; en rojo si queda negativo). El desplegable de
+  semilla del ensayo ahora lista TODAS las semillas del inventario, con su
+  cultivo al inicio. Ensayos antiguos sin cantidad registrada no descuentan
+  nada; semillas sin stock numérico muestran "—" en Restante.
 
 ## Qué cambió en v0.5
 - Proveedores: ahora es un desplegable al registrar/editar una semilla, con lista
