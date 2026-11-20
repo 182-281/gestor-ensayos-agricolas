@@ -91,6 +91,11 @@ function migrar(d){
   d.cultivos.forEach(function(c){
     if(!Array.isArray(c.tipologias)) c.tipologias = (TIPOLOGIAS_INICIALES[c.nombre]||[]).slice();
   });
+  d.ensayos.forEach(function(en){
+    if(!Array.isArray(en.semillasUsadas)){
+      en.semillasUsadas = en.semillaId ? [{semillaId: en.semillaId, cantidad: en.cantidadSemilla||""}] : [];
+    }
+  });
   d.semillas.forEach(function(sm){
     if(sm.proveedor && !d.proveedores.some(function(p){ return p.nombre.toLowerCase()===sm.proveedor.toLowerCase(); })){
       d.proveedores.push({id: uid(), nombre: sm.proveedor});
@@ -221,10 +226,12 @@ var editSemId = null;
 function usadaSemilla(semillaId){
   var total = 0;
   estado.ensayos.forEach(function(e){
-    if(e.semillaId===semillaId){
-      var n = parseFloat(e.cantidadSemilla);
-      if(!isNaN(n)) total += n;
-    }
+    (e.semillasUsadas||[]).forEach(function(su){
+      if(su.semillaId===semillaId){
+        var n = parseFloat(su.cantidad);
+        if(!isNaN(n)) total += n;
+      }
+    });
   });
   return total;
 }
@@ -404,7 +411,7 @@ function renderEnsayos(){
         '<div class="sub">'+esc(nombreCultivo(e.cultivoId))+
         (e.tipo&&e.tipo!=="Sin especificar"?' · '+esc(e.tipo):'')+
         (e.productor?' · '+esc(e.productor):'')+(e.localidad?' · '+esc(e.localidad):'')+
-        ' · '+e.tratamientos.length+' tratamientos × '+e.repeticiones+' repeticiones'+
+        ' · '+tratamientosDe(e).length+' tratamientos × '+e.repeticiones+' repeticiones'+
         ' · '+e.evaluaciones.length+' evaluaciones · '+esc(e.conclusion||"Pendiente")+'</div></li>';
     });
     html += '</ul>';
@@ -428,13 +435,14 @@ function formularioEnsayo(e){
     '<div class="campo"><label>Cultivo *</label><select id="eCultivo">'+
       estado.cultivos.map(function(c){ return '<option value="'+c.id+'"'+(ed&&e.cultivoId===c.id?' selected':'')+'>'+esc(c.nombre)+'</option>'; }).join("")+
     '</select></div>'+
-    '<div class="campo"><label>Semilla (del inventario, opcional)</label><select id="eSemilla"><option value="">— Sin vincular —</option></select></div>'+
-    '<div class="campo" style="max-width:170px"><label>Cantidad de semilla a usar</label><input id="eCantSem" inputmode="decimal" value="'+esc(e.cantidadSemilla||"")+'" placeholder="Ej.: 2"></div>'+
+    '<div class="campo"><label>Semillas del inventario (puedes elegir varias)</label><select id="eSemillas" multiple size="4" style="min-height:92px"'+(conEval?' disabled':'')+'></select>'+
+      '<p class="muted" style="margin:2px 0 0">Toca una y luego las demás para elegir varias. Las elegidas serán los tratamientos de la planilla, junto con el testigo.</p></div>'+
+    '<div class="campo" id="cantSemillas" style="min-width:210px"></div>'+
     '<div class="campo"><label>Productor</label><input id="eProductor" value="'+esc(e.productor||"")+'" placeholder="Ej.: Fundo Demo"></div>'+
     '<div class="campo"><label>Localidad</label><input id="eLocalidad" value="'+esc(e.localidad||"")+'" placeholder="Ej.: Valle Demo"></div>'+
     '<div class="campo"><label>Responsable</label><input id="eResponsable" value="'+esc(e.responsable||"")+'" placeholder="Ej.: Juan Demo"></div>'+
     '<div class="campo" style="max-width:110px"><label>Cantidad</label><input id="eCantidad" inputmode="decimal" value="'+esc(e.cantidad||"")+'"></div>'+
-    '<div class="campo"><label>Campo de testigo</label><input id="eTestigo" value="'+esc(e.testigo||"")+'"></div>'+
+    '<div class="campo"><label>Campo de testigo</label><input id="eTestigo" value="'+esc(e.testigo||"")+'"'+(conEval&&e.semillasUsadas&&e.semillasUsadas.length?' disabled':'')+'></div>'+
     '<div class="campo"><label>F. siembra</label><input id="eFSiembra" type="date" value="'+esc(e.fSiembra||"")+'"></div>'+
     '<div class="campo"><label>F. trasplante</label><input id="eFTrasplante" type="date" value="'+esc(e.fTrasplante||"")+'"></div>'+
     '<div class="campo"><label>F. cosecha</label><input id="eFCosecha" type="date" value="'+esc(e.fCosecha||"")+'"></div>'+
@@ -445,7 +453,8 @@ function formularioEnsayo(e){
     '<div class="campo" style="min-width:170px"><label>&nbsp;</label><button class="btn sec" id="btnGeo" type="button">Capturar ubicación</button><span class="muted" id="geoMsg"></span></div>'+
     '</div>'+
     '<div class="fila">'+
-    '<div class="campo"><label>Tratamientos (separados por coma) *</label><input id="eTrat" value="'+esc(ed?e.tratamientos.join(", "):"")+'" placeholder="Ej.: Testigo, T1, T2, T3"'+(conEval?' disabled':'')+'></div>'+
+    '<div class="campo"><label>Tratamientos (separados por coma)</label><input id="eTrat" value="'+esc(ed?e.tratamientos.join(", "):"")+'" placeholder="Ej.: Testigo, T1, T2, T3"'+(conEval?' disabled':'')+'>'+
+      '<p class="muted" style="margin:2px 0 0">Obligatorio solo si no vinculas semillas del inventario.</p></div>'+
     '<div class="campo" style="max-width:130px"><label>Repeticiones</label><input id="eRep" type="number" min="1" value="'+(ed?e.repeticiones:3)+'"'+(conEval?' disabled':'')+'></div>'+
     '</div>'+
     (conEval?'<p class="muted">Tratamientos y repeticiones no se pueden cambiar porque el ensayo ya tiene evaluaciones registradas.</p>':'')+
@@ -457,15 +466,37 @@ function formularioEnsayo(e){
 function conectarFormularioEnsayo(e){
   var ed = !!e;
   var selCultivo = document.getElementById("eCultivo");
-  var selSemilla = document.getElementById("eSemilla");
-  (function poblarSemillas(){
-    var opts = '<option value="">— Sin vincular —</option>';
-    estado.semillas.forEach(function(s){
-      opts += '<option value="'+s.id+'">'+esc(nombreCultivo(s.cultivoId))+' · '+esc(etiquetaSemilla(s))+'</option>';
+  var selSemillas = document.getElementById("eSemillas");
+  var contCant = document.getElementById("cantSemillas");
+  selSemillas.innerHTML = estado.semillas.map(function(s){
+    return '<option value="'+s.id+'">'+esc(nombreCultivo(s.cultivoId))+' · '+esc(etiquetaSemilla(s))+'</option>';
+  }).join("");
+  var previas = {};
+  (ed?e.semillasUsadas||[]:[]).forEach(function(su){ previas[su.semillaId] = su.cantidad||""; });
+  Array.prototype.forEach.call(selSemillas.options, function(o){
+    if(previas.hasOwnProperty(o.value)) o.selected = true;
+  });
+  function pintarCantidades(){
+    var sel = Array.prototype.filter.call(selSemillas.options, function(o){ return o.selected; }).map(function(o){ return o.value; });
+    contCant.querySelectorAll("input").forEach(function(i){ previas[i.dataset.sid] = i.value; });
+    if(!sel.length){
+      contCant.innerHTML = '<label>Cantidad a usar por semilla</label><p class="muted" style="margin:2px 0 0">Sin semillas vinculadas.</p>';
+      return;
+    }
+    contCant.innerHTML = '<label>Cantidad a usar por semilla</label>'+sel.map(function(id){
+      var s = semillaDe(id);
+      return '<div style="margin-top:4px"><span class="muted">'+esc(s?etiquetaSemilla(s):"")+(s&&s.unidad?' ('+esc(s.unidad)+')':'')+'</span>'+
+        '<input data-sid="'+id+'" inputmode="decimal" value="'+esc(previas[id]||"")+'"'+(selSemillas.disabled?' disabled':'')+'></div>';
+    }).join("");
+  }
+  selSemillas.addEventListener("change", pintarCantidades);
+  pintarCantidades();
+  function semillasElegidas(){
+    return Array.prototype.filter.call(selSemillas.options, function(o){ return o.selected; }).map(function(o){
+      var inp = contCant.querySelector('input[data-sid="'+o.value+'"]');
+      return {semillaId: o.value, cantidad: inp ? inp.value.trim() : (previas[o.value]||"")};
     });
-    selSemilla.innerHTML = opts;
-  })();
-  if(ed && e.semillaId){ selSemilla.value = e.semillaId; }
+  }
 
   document.getElementById("btnGeo").addEventListener("click", function(){
     var msg = document.getElementById("geoMsg");
@@ -484,17 +515,17 @@ function conectarFormularioEnsayo(e){
     var conEval = ed && e.evaluaciones.length > 0;
     var trat = ed ? e.tratamientos : null;
     var rep = ed ? e.repeticiones : 1;
+    var semUsadas = ed && conEval ? e.semillasUsadas : semillasElegidas();
     if(!conEval){
       trat = document.getElementById("eTrat").value.split(",").map(function(t){return t.trim();}).filter(Boolean);
-      if(!trat.length){ alert("Indica al menos un tratamiento."); return; }
+      if(!trat.length && !semUsadas.length){ alert("Indica al menos un tratamiento o vincula al menos una semilla del inventario."); return; }
       rep = Math.max(1, parseInt(document.getElementById("eRep").value,10)||1);
     }
     var datos = {
       nombre: nombre,
       tipo: document.getElementById("eTipo").value,
       cultivoId: selCultivo.value,
-      semillaId: selSemilla.value || null,
-      cantidadSemilla: selSemilla.value ? document.getElementById("eCantSem").value.trim() : "",
+      semillasUsadas: semUsadas,
       productor: document.getElementById("eProductor").value.trim(),
       localidad: document.getElementById("eLocalidad").value.trim(),
       responsable: document.getElementById("eResponsable").value.trim(),
@@ -543,16 +574,18 @@ function renderEnsayo(id){
   var e = estado.ensayos.find(function(x){ return x.id===id; });
   if(!e){ vista=null; render(); return; }
   var c = cultivoDe(e.cultivoId);
-  var s = e.semillaId ? semillaDe(e.semillaId) : null;
   var html = '<button class="volver" id="volver">← Volver a ensayos</button>'+
     '<div class="tarjeta"><h2>'+esc(e.nombre)+'</h2>'+
     '<p><span class="chip">'+esc(nombreCultivo(e.cultivoId))+'</span>'+
     (e.tipo&&e.tipo!=="Sin especificar"?'<span class="chip">'+esc(e.tipo)+'</span>':'')+
-    '<span class="chip">'+e.tratamientos.length+' tratamientos</span>'+
+    '<span class="chip">'+tratamientosDe(e).length+' tratamientos</span>'+
     '<span class="chip">'+e.repeticiones+' repeticiones</span>'+
     '<span class="chip">'+esc(e.conclusion||"Pendiente")+'</span></p>'+
     '<dl class="detalle">'+
-    (s?'<dt>Semilla</dt><dd>'+esc(etiquetaSemilla(s))+(s.lote?' · lote '+esc(s.lote):'')+(e.cantidadSemilla?' · usará '+esc(e.cantidadSemilla)+(s.unidad?' '+esc(s.unidad):''):'')+'</dd>':'')+
+    (e.semillasUsadas&&e.semillasUsadas.length?'<dt>Semillas</dt><dd>'+e.semillasUsadas.map(function(su){
+      var sm = semillaDe(su.semillaId);
+      return sm ? esc(etiquetaSemilla(sm))+(su.cantidad?' (usará '+esc(su.cantidad)+(sm.unidad?' '+esc(sm.unidad):'')+')':'') : '(semilla eliminada)';
+    }).join(", ")+'</dd>':'')+
     (e.productor?'<dt>Productor</dt><dd>'+esc(e.productor)+'</dd>':'')+
     (e.localidad?'<dt>Localidad</dt><dd>'+esc(e.localidad)+'</dd>':'')+
     (e.responsable?'<dt>Responsable</dt><dd>'+esc(e.responsable)+'</dd>':'')+
@@ -563,7 +596,7 @@ function renderEnsayo(id){
     (e.fCosecha?'<dt>F. cosecha</dt><dd>'+esc(e.fCosecha)+'</dd>':'')+
     (e.segmento?'<dt>Segmento</dt><dd>'+esc(e.segmento)+(e.segmentoDetalle?' — '+esc(e.segmentoDetalle):'')+'</dd>':'')+
     (e.lat&&e.lon?'<dt>Ubicación</dt><dd>'+esc(e.lat)+', '+esc(e.lon)+'</dd>':'')+
-    '<dt>Tratamientos</dt><dd>'+esc(e.tratamientos.join(", "))+'</dd>'+
+    '<dt>Tratamientos</dt><dd>'+esc(tratamientosDe(e).join(", "))+'</dd>'+
     '<dt>Variables</dt><dd>'+(c?esc(c.variables.map(function(x){return x.nombre;}).join(", ")):"-")+'</dd>'+
     '</dl></div>'+
     '<div class="tarjeta"><h2>Resultado y conclusión</h2>'+
@@ -609,9 +642,20 @@ function renderEnsayo(id){
 }
 
 /* ---------- Evaluar ---------- */
+function tratamientosDe(e){
+  if(e.semillasUsadas && e.semillasUsadas.length){
+    var l = e.semillasUsadas.map(function(su){
+      var s = semillaDe(su.semillaId);
+      return s ? s.variedad : "(semilla eliminada)";
+    });
+    if(e.testigo) l.push("Testigo: "+e.testigo);
+    return l;
+  }
+  return e.tratamientos;
+}
 function parcelas(e){
   var p = [];
-  e.tratamientos.forEach(function(t, i){
+  tratamientosDe(e).forEach(function(t, i){
     for(var r=1; r<=e.repeticiones; r++){ p.push({tratamiento: t, rep: r, clave: "T"+(i+1)+"-R"+r}); }
   });
   return p;
@@ -788,7 +832,7 @@ function pintarResultados(id, fecha){
     if(ev.fecha !== fecha) return;
     Object.keys(ev.valores||{}).forEach(function(clave){
       var tratIdx = parseInt(clave.split("-")[0].slice(1),10)-1;
-      var trat = e.tratamientos[tratIdx] || clave;
+      var trat = tratamientosDe(e)[tratIdx] || clave;
       var vals = ev.valores[clave];
       Object.keys(vals).forEach(function(vid){
         var num = parseFloat(String(vals[vid]).replace(",", "."));
@@ -801,11 +845,11 @@ function pintarResultados(id, fecha){
     });
   });
   var html = '<div class="envoltura-tabla tarjeta"><table><thead><tr><th>Variable</th>';
-  e.tratamientos.forEach(function(t){ html += '<th>'+esc(t)+'</th>'; });
+  tratamientosDe(e).forEach(function(t){ html += '<th>'+esc(t)+'</th>'; });
   html += '</tr></thead><tbody>';
   (c?c.variables:[]).forEach(function(x){
     html += '<tr><td><strong>'+esc(x.nombre)+'</strong>'+(x.unidad?' <span class="muted">('+esc(x.unidad)+')</span>':'')+'</td>';
-    e.tratamientos.forEach(function(t){
+    tratamientosDe(e).forEach(function(t){
       var a = acum[t] && acum[t][x.id];
       var n = a ? Object.keys(a.parcelas).length : 0;
       html += '<td>'+(a ? (Math.round(a.suma/n*100)/100)+' <span class="muted">(n='+n+')</span>' : '—')+'</td>';
@@ -823,12 +867,12 @@ function exportarCSV(e, c){
   var cab = ["Ensayo","Cultivo","Semilla","Fecha evaluación","Parcela","Tratamiento","Repetición"]
     .concat(vars.map(function(x){ return x.nombre+(x.unidad?" ("+x.unidad+")":""); }));
   var lineas = [cab.map(function(x){ return '"'+x+'"'; }).join(";")];
-  var s = e.semillaId ? semillaDe(e.semillaId) : null;
+  var s = (e.semillasUsadas||[]).map(function(su){ var sm = semillaDe(su.semillaId); return sm?etiquetaSemilla(sm):""; }).filter(Boolean).join("; ");
   e.evaluaciones.forEach(function(ev){
     parcelas(e).forEach(function(p){
       var vals = (ev.valores||{})[p.clave];
       if(!vals) return;
-      var fila = [e.nombre, nombreCultivo(e.cultivoId), s?etiquetaSemilla(s):"", ev.fecha, p.clave, p.tratamiento, p.rep];
+      var fila = [e.nombre, nombreCultivo(e.cultivoId), s, ev.fecha, p.clave, p.tratamiento, p.rep];
       vars.forEach(function(x){ fila.push(vals[x.id]!=null ? String(vals[x.id]).replace(",", ".") : ""); });
       lineas.push(fila.map(function(celda){ return '"'+String(celda).replace(/"/g,'""')+'"'; }).join(";"));
     });
