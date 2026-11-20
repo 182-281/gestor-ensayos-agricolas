@@ -51,7 +51,7 @@ var CULTIVOS_INICIALES = [
     v("Incidencia de plagas","%"), v("Incidencia de enfermedades","%"), v("Rendimiento","kg/parcela")]}
 ];
 var TIPOS_ENSAYO = ["Sin especificar","Segmentación","Caracterización","Lanzamiento"];
-var SEGMENTOS = ["Verano","Invierno","Todo el año","Otro"];
+var SEGMENTOS = ["Verano","Otoño","Invierno","Primavera"];
 var CONCLUSIONES = ["Pendiente","Favorable","No favorable"];
 
 /* Proveedores iniciales del rubro semillero (lista editable en la pestaña Semillas). */
@@ -152,7 +152,9 @@ function etiquetaSemilla(s){
   return nombreCultivo(s.cultivoId)+" - "+s.variedad+(s.proveedor?" ("+s.proveedor+")":"");
 }
 function opciones(lista, actual){
-  return lista.map(function(x){ return '<option'+(x===actual?' selected':'')+'>'+esc(x)+'</option>'; }).join("");
+  var l = lista.slice();
+  if(actual && l.indexOf(actual)<0) l.push(actual);
+  return l.map(function(x){ return '<option'+(x===actual?' selected':'')+'>'+esc(x)+'</option>'; }).join("");
 }
 
 /* ---------- Cultivos ---------- */
@@ -216,6 +218,27 @@ function renderCultivo(i){
 
 /* ---------- Semillas (inventario / kardex) ---------- */
 var editSemId = null;
+function usadaSemilla(semillaId){
+  var total = 0;
+  estado.ensayos.forEach(function(e){
+    if(e.semillaId===semillaId){
+      var n = parseFloat(e.cantidadSemilla);
+      if(!isNaN(n)) total += n;
+    }
+  });
+  return total;
+}
+function restanteSemilla(s){
+  if(s.stock===""||s.stock==null) return "—";
+  var stock = parseFloat(s.stock);
+  if(isNaN(stock)) return "—";
+  var usada = usadaSemilla(s.id);
+  var rest = stock - usada;
+  var txt = (Math.round(rest*100)/100) + (s.unidad?" "+esc(s.unidad):"");
+  if(usada>0) txt += ' <span class="muted">(usó '+(Math.round(usada*100)/100)+')</span>';
+  if(rest<0) txt = '<strong style="color:#b3261e">'+txt+'</strong>';
+  return txt;
+}
 function renderSemillas(){
   var html = '<div class="tarjeta"><h2>Inventario de semillas</h2>'+
     '<p class="muted">Registra las semillas que usas en tus ensayos: variedad, proveedor y stock.</p></div>';
@@ -223,29 +246,18 @@ function renderSemillas(){
     html += '<div class="aviso">Todavía no hay semillas registradas. Agrega la primera abajo.</div>';
   } else {
     html += '<div class="envoltura-tabla tarjeta"><table><thead><tr>'+
-      '<th>Cultivo</th><th>Variedad</th><th>Proveedor</th><th>Tipología</th><th>Lote</th><th>Stock</th><th>Código</th><th></th>'+
+      '<th>Cultivo</th><th>Variedad</th><th>Proveedor</th><th>Tipología</th><th>Lote</th><th>Stock</th><th>Restante</th><th>Código</th><th></th>'+
       '</tr></thead><tbody>';
     estado.semillas.forEach(function(s, i){
       html += '<tr><td>'+esc(nombreCultivo(s.cultivoId))+'</td><td><strong>'+esc(s.variedad)+'</strong></td>'+
         '<td>'+esc(s.proveedor||"—")+'</td><td>'+esc(s.tipologia||"—")+'</td><td>'+esc(s.lote||"—")+'</td>'+
         '<td>'+(s.stock!==""&&s.stock!=null?esc(s.stock)+" "+esc(s.unidad||""):"—")+'</td>'+
+        '<td>'+restanteSemilla(s)+'</td>'+
         '<td>'+esc(s.codigo||"—")+'</td>'+
         '<td><button class="mini edSem" data-i="'+i+'">Editar</button> <button class="mini" data-i="'+i+'">Quitar</button></td></tr>';
     });
     html += '</tbody></table></div>';
   }
-  html += '<div class="tarjeta"><h2>Proveedores</h2>'+
-    '<p class="muted">Esta lista alimenta el desplegable de proveedor al registrar una semilla. Agrega o quita proveedores aquí, o directamente desde el formulario de semilla.</p>';
-  if(estado.proveedores.length){
-    html += '<ul class="lista">';
-    estado.proveedores.forEach(function(p, i){
-      html += '<li><strong>'+esc(p.nombre)+'</strong> <button class="mini qProv" data-i="'+i+'">Quitar</button></li>';
-    });
-    html += '</ul>';
-  }
-  html += '<div class="fila">'+
-    '<div class="campo"><input id="nuevoProv" placeholder="Nombre del proveedor"></div>'+
-    '<button class="btn sec" id="btnAgregarProv">Agregar proveedor</button></div></div>';
   html += '<div class="tarjeta"><h2 id="tituloFormSem">Nueva semilla</h2><div class="fila">'+
     '<div class="campo"><label>Cultivo *</label><select id="sCultivo">'+
       estado.cultivos.map(function(c){ return '<option value="'+c.id+'">'+esc(c.nombre)+'</option>'; }).join("")+
@@ -310,22 +322,7 @@ function renderSemillas(){
   });
   selCultivo.addEventListener("change", function(){ llenarTipologias(""); });
 
-  document.getElementById("btnAgregarProv").addEventListener("click", function(){
-    var nombre = document.getElementById("nuevoProv").value.trim();
-    if(!nombre) return;
-    if(!estado.proveedores.some(function(p){ return p.nombre.toLowerCase()===nombre.toLowerCase(); })){
-      estado.proveedores.push({id: uid(), nombre: nombre});
-      guardar();
-    }
-    render();
-  });
-  app.querySelectorAll("button.qProv").forEach(function(b){
-    b.addEventListener("click", function(){
-      estado.proveedores.splice(+b.dataset.i,1); guardar(); render();
-    });
-  });
-
-  app.querySelectorAll("button.mini:not(.edSem):not(.qProv)").forEach(function(b){
+  app.querySelectorAll("button.mini:not(.edSem)").forEach(function(b){
     b.addEventListener("click", function(){
       if(confirm("¿Quitar esta semilla del inventario? Los ensayos que la usan conservarán su nombre como referencia.")){
         estado.semillas.splice(+b.dataset.i,1); guardar(); render();
@@ -432,6 +429,7 @@ function formularioEnsayo(e){
       estado.cultivos.map(function(c){ return '<option value="'+c.id+'"'+(ed&&e.cultivoId===c.id?' selected':'')+'>'+esc(c.nombre)+'</option>'; }).join("")+
     '</select></div>'+
     '<div class="campo"><label>Semilla (del inventario, opcional)</label><select id="eSemilla"><option value="">— Sin vincular —</option></select></div>'+
+    '<div class="campo" style="max-width:170px"><label>Cantidad de semilla a usar</label><input id="eCantSem" inputmode="decimal" value="'+esc(e.cantidadSemilla||"")+'" placeholder="Ej.: 2"></div>'+
     '<div class="campo"><label>Productor</label><input id="eProductor" value="'+esc(e.productor||"")+'" placeholder="Ej.: Fundo Demo"></div>'+
     '<div class="campo"><label>Localidad</label><input id="eLocalidad" value="'+esc(e.localidad||"")+'" placeholder="Ej.: Valle Demo"></div>'+
     '<div class="campo"><label>Responsable</label><input id="eResponsable" value="'+esc(e.responsable||"")+'" placeholder="Ej.: Juan Demo"></div>'+
@@ -460,17 +458,13 @@ function conectarFormularioEnsayo(e){
   var ed = !!e;
   var selCultivo = document.getElementById("eCultivo");
   var selSemilla = document.getElementById("eSemilla");
-  function poblarSemillas(){
+  (function poblarSemillas(){
     var opts = '<option value="">— Sin vincular —</option>';
     estado.semillas.forEach(function(s){
-      if(s.cultivoId===selCultivo.value){
-        opts += '<option value="'+s.id+'">'+esc(etiquetaSemilla(s))+'</option>';
-      }
+      opts += '<option value="'+s.id+'">'+esc(nombreCultivo(s.cultivoId))+' · '+esc(etiquetaSemilla(s))+'</option>';
     });
     selSemilla.innerHTML = opts;
-  }
-  selCultivo.addEventListener("change", poblarSemillas);
-  poblarSemillas();
+  })();
   if(ed && e.semillaId){ selSemilla.value = e.semillaId; }
 
   document.getElementById("btnGeo").addEventListener("click", function(){
@@ -500,6 +494,7 @@ function conectarFormularioEnsayo(e){
       tipo: document.getElementById("eTipo").value,
       cultivoId: selCultivo.value,
       semillaId: selSemilla.value || null,
+      cantidadSemilla: selSemilla.value ? document.getElementById("eCantSem").value.trim() : "",
       productor: document.getElementById("eProductor").value.trim(),
       localidad: document.getElementById("eLocalidad").value.trim(),
       responsable: document.getElementById("eResponsable").value.trim(),
@@ -557,7 +552,7 @@ function renderEnsayo(id){
     '<span class="chip">'+e.repeticiones+' repeticiones</span>'+
     '<span class="chip">'+esc(e.conclusion||"Pendiente")+'</span></p>'+
     '<dl class="detalle">'+
-    (s?'<dt>Semilla</dt><dd>'+esc(etiquetaSemilla(s))+(s.lote?' · lote '+esc(s.lote):'')+'</dd>':'')+
+    (s?'<dt>Semilla</dt><dd>'+esc(etiquetaSemilla(s))+(s.lote?' · lote '+esc(s.lote):'')+(e.cantidadSemilla?' · usará '+esc(e.cantidadSemilla)+(s.unidad?' '+esc(s.unidad):''):'')+'</dd>':'')+
     (e.productor?'<dt>Productor</dt><dd>'+esc(e.productor)+'</dd>':'')+
     (e.localidad?'<dt>Localidad</dt><dd>'+esc(e.localidad)+'</dd>':'')+
     (e.responsable?'<dt>Responsable</dt><dd>'+esc(e.responsable)+'</dd>':'')+
