@@ -1,4 +1,4 @@
-# Gestor de Ensayos Agrícolas — Proyecto fuente (v0.3, instalable PWA)
+# Gestor de Ensayos Agrícolas — Proyecto fuente (v0.4, instalable PWA)
 
 Aplicación web propia para gestionar ensayos agrícolas: inventario de semillas,
 fichas de ensayo, evaluaciones por parcela con variables editables por cultivo,
@@ -7,6 +7,20 @@ resultados por fecha y respaldo de datos.
 Esta versión es una PWA (aplicación web progresiva): cumple todos los requisitos
 de instalación de Chrome (verificado: sin errores de instalabilidad, funciona
 sin conexión una vez cargada).
+
+## Qué cambió en v0.4
+- Ahora TODO lo guardado se puede editar, no solo quitar:
+  - Semillas: botón "Editar" en cada fila del inventario (reutiliza el mismo formulario).
+  - Ensayos: botón "Editar ficha del ensayo" en la ficha de cada ensayo.
+    Tratamientos y repeticiones se bloquean si ya hay evaluaciones registradas
+    (para no descuadrar las parcelas ya evaluadas).
+  - Evaluaciones: botón "Editar" junto a cada evaluación en la ficha del ensayo;
+    la planilla se abre con los valores ya cargados. Al abrir la planilla con una
+    fecha que ya tiene evaluación, la app pregunta si se quiere editar la existente.
+  - Cultivos: ahora también se puede corregir el nombre del cultivo (además de
+    agregar, renombrar y quitar variables, que ya estaba en v0.2).
+- La URL y los datos guardados en el celular no cambian: la app instalada se
+  actualiza sola al abrirla con internet (nuevo cache del service worker).
 
 ## Qué cambió respecto a v0.2
 
