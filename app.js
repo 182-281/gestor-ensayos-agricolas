@@ -143,6 +143,7 @@ function renderCultivo(i){
   var c = estado.cultivos[i];
   var html = '<button class="volver" id="volver">← Volver a cultivos</button>'+
     '<div class="tarjeta"><h2>'+esc(c.nombre)+'</h2>'+
+    '<div class="fila"><div class="campo"><label>Nombre del cultivo</label><input id="nomCultivo" value="'+esc(c.nombre)+'"></div></div>'+
     '<p class="muted">Variables de evaluación de este cultivo.</p>';
   c.variables.forEach(function(x, j){
     html += '<div class="fila" style="margin-top:6px">'+
@@ -156,6 +157,10 @@ function renderCultivo(i){
   document.getElementById("agregarVar").addEventListener("click", function(){
     c.variables.push(v("Nueva variable","")); guardar(); render();
   });
+  document.getElementById("nomCultivo").addEventListener("change", function(){
+    var n = this.value.trim();
+    if(n && n!==c.nombre){ c.nombre = n; guardar(); render(); }
+  });
   app.querySelectorAll(".varNom").forEach(function(inp){
     inp.addEventListener("change", function(){ c.variables[+inp.dataset.j].nombre = inp.value.trim()||c.variables[+inp.dataset.j].nombre; guardar(); });
   });
@@ -168,6 +173,7 @@ function renderCultivo(i){
 }
 
 /* ---------- Semillas (inventario / kardex) ---------- */
+var editSemId = null;
 function renderSemillas(){
   var html = '<div class="tarjeta"><h2>Inventario de semillas</h2>'+
     '<p class="muted">Registra las semillas que usas en tus ensayos: variedad, proveedor y stock.</p></div>';
@@ -182,11 +188,11 @@ function renderSemillas(){
         '<td>'+esc(s.proveedor||"—")+'</td><td>'+esc(s.tipologia||"—")+'</td><td>'+esc(s.lote||"—")+'</td>'+
         '<td>'+(s.stock!==""&&s.stock!=null?esc(s.stock)+" "+esc(s.unidad||""):"—")+'</td>'+
         '<td>'+esc(s.codigo||"—")+'</td>'+
-        '<td><button class="mini" data-i="'+i+'">Quitar</button></td></tr>';
+        '<td><button class="mini edSem" data-i="'+i+'">Editar</button> <button class="mini" data-i="'+i+'">Quitar</button></td></tr>';
     });
     html += '</tbody></table></div>';
   }
-  html += '<div class="tarjeta"><h2>Nueva semilla</h2><div class="fila">'+
+  html += '<div class="tarjeta"><h2 id="tituloFormSem">Nueva semilla</h2><div class="fila">'+
     '<div class="campo"><label>Cultivo *</label><select id="sCultivo">'+
       estado.cultivos.map(function(c){ return '<option value="'+c.id+'">'+esc(c.nombre)+'</option>'; }).join("")+
     '</select></div>'+
@@ -197,20 +203,39 @@ function renderSemillas(){
     '<div class="campo" style="max-width:100px"><label>Stock</label><input id="sStock" inputmode="decimal"></div>'+
     '<div class="campo" style="max-width:90px"><label>Unidad</label><input id="sUnidad" placeholder="kg"></div>'+
     '<div class="campo" style="max-width:130px"><label>Código</label><input id="sCodigo" placeholder="Ej.: ENS-001"></div>'+
-    '</div><div class="acciones"><button class="btn" id="crearSemilla">Agregar semilla</button></div></div>';
+    '</div><div class="acciones"><button class="btn" id="crearSemilla">Agregar semilla</button> <button class="btn sec" id="cancelarSem" type="button" style="display:none">Cancelar</button></div></div>';
   app.innerHTML = html;
-  app.querySelectorAll("button.mini").forEach(function(b){
+  app.querySelectorAll("button.mini:not(.edSem)").forEach(function(b){
     b.addEventListener("click", function(){
       if(confirm("¿Quitar esta semilla del inventario? Los ensayos que la usan conservarán su nombre como referencia.")){
         estado.semillas.splice(+b.dataset.i,1); guardar(); render();
       }
     });
   });
+  app.querySelectorAll("button.edSem").forEach(function(b){
+    b.addEventListener("click", function(){
+      var sem = estado.semillas[+b.dataset.i];
+      if(!sem) return;
+      editSemId = sem.id;
+      document.getElementById("tituloFormSem").textContent = "Editar semilla";
+      document.getElementById("sCultivo").value = sem.cultivoId;
+      document.getElementById("sVariedad").value = sem.variedad||"";
+      document.getElementById("sProveedor").value = sem.proveedor||"";
+      document.getElementById("sTipologia").value = sem.tipologia||"";
+      document.getElementById("sLote").value = sem.lote||"";
+      document.getElementById("sStock").value = sem.stock||"";
+      document.getElementById("sUnidad").value = sem.unidad||"";
+      document.getElementById("sCodigo").value = sem.codigo||"";
+      document.getElementById("crearSemilla").textContent = "Guardar cambios";
+      document.getElementById("cancelarSem").style.display = "";
+      document.getElementById("sVariedad").focus();
+    });
+  });
+  document.getElementById("cancelarSem").addEventListener("click", function(){ editSemId = null; render(); });
   document.getElementById("crearSemilla").addEventListener("click", function(){
     var variedad = document.getElementById("sVariedad").value.trim();
     if(!variedad){ alert("Falta la variedad."); return; }
-    estado.semillas.push({
-      id: uid(),
+    var datos = {
       cultivoId: document.getElementById("sCultivo").value,
       variedad: variedad,
       proveedor: document.getElementById("sProveedor").value.trim(),
@@ -219,7 +244,15 @@ function renderSemillas(){
       stock: document.getElementById("sStock").value.trim(),
       unidad: document.getElementById("sUnidad").value.trim(),
       codigo: document.getElementById("sCodigo").value.trim()
-    });
+    };
+    if(editSemId){
+      var sem = estado.semillas.find(function(x){ return x.id===editSemId; });
+      if(sem){ for(var k in datos){ sem[k] = datos[k]; } }
+      editSemId = null;
+    } else {
+      datos.id = uid();
+      estado.semillas.push(datos);
+    }
     guardar(); render();
   });
 }
@@ -242,35 +275,52 @@ function renderEnsayos(){
     });
     html += '</ul>';
   }
-  html += '<div class="tarjeta"><h2>Nuevo ensayo</h2>'+
+  html += formularioEnsayo(null);
+  app.innerHTML = html;
+  conectarFormularioEnsayo(null);
+
+  app.querySelectorAll(".lista li").forEach(function(li){
+    li.addEventListener("click", function(){ vista = function(){ renderEnsayo(li.dataset.id); }; render(); });
+  });
+}
+function formularioEnsayo(e){
+  var ed = !!e;
+  e = e || {};
+  var conEval = ed && e.evaluaciones && e.evaluaciones.length > 0;
+  var html = '<div class="tarjeta"><h2>'+(ed?'Editar ensayo':'Nuevo ensayo')+'</h2>'+
     '<div class="fila">'+
-    '<div class="campo"><label>Nombre o código del ensayo *</label><input id="eNombre" placeholder="Ej.: ENS-001 Variedades tomate"></div>'+
-    '<div class="campo"><label>Tipo de ensayo</label><select id="eTipo">'+opciones(TIPOS_ENSAYO)+'</select></div>'+
+    '<div class="campo"><label>Nombre o código del ensayo *</label><input id="eNombre" value="'+esc(e.nombre||"")+'" placeholder="Ej.: ENS-001 Variedades tomate"></div>'+
+    '<div class="campo"><label>Tipo de ensayo</label><select id="eTipo">'+opciones(TIPOS_ENSAYO, e.tipo)+'</select></div>'+
     '<div class="campo"><label>Cultivo *</label><select id="eCultivo">'+
-      estado.cultivos.map(function(c){ return '<option value="'+c.id+'">'+esc(c.nombre)+'</option>'; }).join("")+
+      estado.cultivos.map(function(c){ return '<option value="'+c.id+'"'+(ed&&e.cultivoId===c.id?' selected':'')+'>'+esc(c.nombre)+'</option>'; }).join("")+
     '</select></div>'+
     '<div class="campo"><label>Semilla (del inventario, opcional)</label><select id="eSemilla"><option value="">— Sin vincular —</option></select></div>'+
-    '<div class="campo"><label>Productor</label><input id="eProductor" placeholder="Ej.: Fundo Demo"></div>'+
-    '<div class="campo"><label>Localidad</label><input id="eLocalidad" placeholder="Ej.: Valle Demo"></div>'+
-    '<div class="campo"><label>Responsable</label><input id="eResponsable" placeholder="Ej.: Juan Demo"></div>'+
-    '<div class="campo" style="max-width:110px"><label>Cantidad</label><input id="eCantidad" inputmode="decimal"></div>'+
-    '<div class="campo"><label>Campo de testigo</label><input id="eTestigo"></div>'+
-    '<div class="campo"><label>F. siembra</label><input id="eFSiembra" type="date"></div>'+
-    '<div class="campo"><label>F. trasplante</label><input id="eFTrasplante" type="date"></div>'+
-    '<div class="campo"><label>F. cosecha</label><input id="eFCosecha" type="date"></div>'+
-    '<div class="campo"><label>Segmento</label><select id="eSegmento">'+opciones(SEGMENTOS)+'</select></div>'+
-    '<div class="campo"><label>Especificaciones de segmento</label><input id="eSegmentoDetalle"></div>'+
-    '<div class="campo" style="max-width:140px"><label>Latitud</label><input id="eLat" inputmode="decimal"></div>'+
-    '<div class="campo" style="max-width:140px"><label>Longitud</label><input id="eLon" inputmode="decimal"></div>'+
+    '<div class="campo"><label>Productor</label><input id="eProductor" value="'+esc(e.productor||"")+'" placeholder="Ej.: Fundo Demo"></div>'+
+    '<div class="campo"><label>Localidad</label><input id="eLocalidad" value="'+esc(e.localidad||"")+'" placeholder="Ej.: Valle Demo"></div>'+
+    '<div class="campo"><label>Responsable</label><input id="eResponsable" value="'+esc(e.responsable||"")+'" placeholder="Ej.: Juan Demo"></div>'+
+    '<div class="campo" style="max-width:110px"><label>Cantidad</label><input id="eCantidad" inputmode="decimal" value="'+esc(e.cantidad||"")+'"></div>'+
+    '<div class="campo"><label>Campo de testigo</label><input id="eTestigo" value="'+esc(e.testigo||"")+'"></div>'+
+    '<div class="campo"><label>F. siembra</label><input id="eFSiembra" type="date" value="'+esc(e.fSiembra||"")+'"></div>'+
+    '<div class="campo"><label>F. trasplante</label><input id="eFTrasplante" type="date" value="'+esc(e.fTrasplante||"")+'"></div>'+
+    '<div class="campo"><label>F. cosecha</label><input id="eFCosecha" type="date" value="'+esc(e.fCosecha||"")+'"></div>'+
+    '<div class="campo"><label>Segmento</label><select id="eSegmento">'+opciones(SEGMENTOS, e.segmento)+'</select></div>'+
+    '<div class="campo"><label>Especificaciones de segmento</label><input id="eSegmentoDetalle" value="'+esc(e.segmentoDetalle||"")+'"></div>'+
+    '<div class="campo" style="max-width:140px"><label>Latitud</label><input id="eLat" inputmode="decimal" value="'+esc(e.lat||"")+'"></div>'+
+    '<div class="campo" style="max-width:140px"><label>Longitud</label><input id="eLon" inputmode="decimal" value="'+esc(e.lon||"")+'"></div>'+
     '<div class="campo" style="min-width:170px"><label>&nbsp;</label><button class="btn sec" id="btnGeo" type="button">Capturar ubicación</button><span class="muted" id="geoMsg"></span></div>'+
     '</div>'+
     '<div class="fila">'+
-    '<div class="campo"><label>Tratamientos (separados por coma) *</label><input id="eTrat" placeholder="Ej.: Testigo, T1, T2, T3"></div>'+
-    '<div class="campo" style="max-width:130px"><label>Repeticiones</label><input id="eRep" type="number" min="1" value="3"></div>'+
+    '<div class="campo"><label>Tratamientos (separados por coma) *</label><input id="eTrat" value="'+esc(ed?e.tratamientos.join(", "):"")+'" placeholder="Ej.: Testigo, T1, T2, T3"'+(conEval?' disabled':'')+'></div>'+
+    '<div class="campo" style="max-width:130px"><label>Repeticiones</label><input id="eRep" type="number" min="1" value="'+(ed?e.repeticiones:3)+'"'+(conEval?' disabled':'')+'></div>'+
     '</div>'+
-    '<div class="acciones"><button class="btn" id="crearEnsayo">Crear ensayo</button></div></div>';
-  app.innerHTML = html;
-
+    (conEval?'<p class="muted">Tratamientos y repeticiones no se pueden cambiar porque el ensayo ya tiene evaluaciones registradas.</p>':'')+
+    '<div class="acciones"><button class="btn" id="crearEnsayo">'+(ed?'Guardar cambios':'Crear ensayo')+'</button>'+
+    (ed?' <button class="btn sec" id="cancelarEdicion" type="button">Cancelar</button>':'')+
+    '</div></div>';
+  return html;
+}
+function conectarFormularioEnsayo(e){
+  var ed = !!e;
   var selCultivo = document.getElementById("eCultivo");
   var selSemilla = document.getElementById("eSemilla");
   function poblarSemillas(){
@@ -284,6 +334,7 @@ function renderEnsayos(){
   }
   selCultivo.addEventListener("change", poblarSemillas);
   poblarSemillas();
+  if(ed && e.semillaId){ selSemilla.value = e.semillaId; }
 
   document.getElementById("btnGeo").addEventListener("click", function(){
     var msg = document.getElementById("geoMsg");
@@ -296,17 +347,19 @@ function renderEnsayos(){
     }, function(){ msg.textContent = " No se pudo obtener; ingresa las coordenadas a mano."; }, {timeout: 10000});
   });
 
-  app.querySelectorAll(".lista li").forEach(function(li){
-    li.addEventListener("click", function(){ vista = function(){ renderEnsayo(li.dataset.id); }; render(); });
-  });
   document.getElementById("crearEnsayo").addEventListener("click", function(){
     var nombre = document.getElementById("eNombre").value.trim();
     if(!nombre){ alert("Falta el nombre del ensayo."); return; }
-    var trat = document.getElementById("eTrat").value.split(",").map(function(t){return t.trim();}).filter(Boolean);
-    if(!trat.length){ alert("Indica al menos un tratamiento."); return; }
-    var rep = Math.max(1, parseInt(document.getElementById("eRep").value,10)||1);
-    estado.ensayos.push({
-      id: uid(), nombre: nombre,
+    var conEval = ed && e.evaluaciones.length > 0;
+    var trat = ed ? e.tratamientos : null;
+    var rep = ed ? e.repeticiones : 1;
+    if(!conEval){
+      trat = document.getElementById("eTrat").value.split(",").map(function(t){return t.trim();}).filter(Boolean);
+      if(!trat.length){ alert("Indica al menos un tratamiento."); return; }
+      rep = Math.max(1, parseInt(document.getElementById("eRep").value,10)||1);
+    }
+    var datos = {
+      nombre: nombre,
       tipo: document.getElementById("eTipo").value,
       cultivoId: selCultivo.value,
       semillaId: selSemilla.value || null,
@@ -322,12 +375,37 @@ function renderEnsayos(){
       segmentoDetalle: document.getElementById("eSegmentoDetalle").value.trim(),
       lat: document.getElementById("eLat").value.trim(),
       lon: document.getElementById("eLon").value.trim(),
-      tratamientos: trat, repeticiones: rep,
-      resultado: "", conclusion: "Pendiente",
-      evaluaciones: []
-    });
-    guardar(); render();
+      tratamientos: trat, repeticiones: rep
+    };
+    if(ed){
+      for(var k in datos){ e[k] = datos[k]; }
+      guardar();
+      vista = function(){ renderEnsayo(e.id); };
+      render();
+    } else {
+      datos.id = uid();
+      datos.resultado = ""; datos.conclusion = "Pendiente";
+      datos.evaluaciones = [];
+      estado.ensayos.push(datos);
+      guardar(); render();
+    }
   });
+  if(ed){
+    document.getElementById("cancelarEdicion").addEventListener("click", function(){
+      vista = function(){ renderEnsayo(e.id); };
+      render();
+    });
+  }
+}
+function renderEditarEnsayo(id){
+  var e = estado.ensayos.find(function(x){ return x.id===id; });
+  if(!e){ vista=null; render(); return; }
+  app.innerHTML = '<button class="volver" id="volver">← Volver al ensayo</button>'+formularioEnsayo(e);
+  document.getElementById("volver").addEventListener("click", function(){
+    vista = function(){ renderEnsayo(id); };
+    render();
+  });
+  conectarFormularioEnsayo(e);
 }
 function renderEnsayo(id){
   var e = estado.ensayos.find(function(x){ return x.id===id; });
@@ -367,13 +445,24 @@ function renderEnsayo(id){
     html += '<ul class="lista">';
     e.evaluaciones.slice().sort(function(a,b){ return a.fecha<b.fecha?1:-1; }).forEach(function(ev){
       var llenas = Object.keys(ev.valores||{}).length;
-      html += '<li><strong>'+esc(ev.fecha)+'</strong><div class="sub">'+llenas+' parcelas con datos</div></li>';
+      html += '<li><strong>'+esc(ev.fecha)+'</strong><div class="sub">'+llenas+' parcelas con datos</div> <button class="mini edEval" data-ev="'+ev.id+'" data-fecha="'+esc(ev.fecha)+'">Editar</button></li>';
     });
     html += '</ul>';
   }
-  html += '</div><div class="acciones"><button class="btn peligro" id="borrarEnsayo">Eliminar ensayo</button></div>';
+  html += '</div><div class="acciones"><button class="btn sec" id="editarFicha">Editar ficha del ensayo</button> <button class="btn peligro" id="borrarEnsayo">Eliminar ensayo</button></div>';
   app.innerHTML = html;
   document.getElementById("volver").addEventListener("click", function(){ vista=null; guardar(); render(); });
+  document.getElementById("editarFicha").addEventListener("click", function(){
+    vista = function(){ renderEditarEnsayo(id); };
+    render();
+  });
+  app.querySelectorAll("button.edEval").forEach(function(b){
+    b.addEventListener("click", function(){
+      var evId = b.dataset.ev, fecha = b.dataset.fecha;
+      vista = function(){ renderPlanilla(id, fecha, evId); };
+      render();
+    });
+  });
   document.getElementById("guardarCierre").addEventListener("click", function(){
     e.resultado = document.getElementById("eResultado").value.trim();
     e.conclusion = document.getElementById("eConclusion").value;
@@ -411,12 +500,19 @@ function renderEvaluar(){
   document.getElementById("abrirPlanilla").addEventListener("click", function(){
     var id = document.getElementById("selEnsayo").value;
     var fecha = document.getElementById("fEval").value;
-    vista = function(){ renderPlanilla(id, fecha); };
+    var e = estado.ensayos.find(function(x){ return x.id===id; });
+    var existente = e ? e.evaluaciones.find(function(x){ return x.fecha===fecha; }) : null;
+    if(existente && confirm("Ya existe una evaluación en esa fecha. ¿Quieres editarla? (Aceptar = editar, Cancelar = registrar otra nueva)")){
+      vista = function(){ renderPlanilla(id, fecha, existente.id); };
+    } else {
+      vista = function(){ renderPlanilla(id, fecha); };
+    }
     render();
   });
 }
-function renderPlanilla(id, fecha){
+function renderPlanilla(id, fecha, evId){
   var e = estado.ensayos.find(function(x){ return x.id===id; });
+  var ev = evId ? e.evaluaciones.find(function(x){ return x.id===evId; }) : null;
   var c = cultivoDe(e.cultivoId);
   if(!c || !c.variables.length){
     app.innerHTML = '<button class="volver" id="volver">← Volver</button>'+
@@ -425,7 +521,7 @@ function renderPlanilla(id, fecha){
     return;
   }
   var html = '<button class="volver" id="volver">← Volver</button>'+
-    '<div class="tarjeta"><h2>'+esc(e.nombre)+' - '+esc(fecha)+'</h2>'+
+    '<div class="tarjeta"><h2>'+esc(e.nombre)+' - '+esc(fecha)+(ev?' (editando)':'')+'</h2>'+
     '<p class="muted">Planilla por parcela (tratamiento-repetición). Deja vacío lo que no se evaluó.</p></div>'+
     '<div class="envoltura-tabla"><table><thead><tr><th>Parcela</th>';
   c.variables.forEach(function(x){
@@ -435,7 +531,8 @@ function renderPlanilla(id, fecha){
   parcelas(e).forEach(function(p){
     html += '<tr><td><strong>'+esc(p.clave)+'</strong><br><span class="muted">'+esc(p.tratamiento)+'</span></td>';
     c.variables.forEach(function(x){
-      html += '<td><input data-p="'+p.clave+'" data-v="'+x.id+'" inputmode="decimal"></td>';
+      var valPrev = ev && ev.valores[p.clave] ? (ev.valores[p.clave][x.id]||"") : "";
+      html += '<td><input data-p="'+p.clave+'" data-v="'+x.id+'" inputmode="decimal" value="'+esc(valPrev)+'"></td>';
     });
     html += '</tr>';
   });
@@ -452,9 +549,13 @@ function renderPlanilla(id, fecha){
       valores[pk][vk] = val;
     });
     if(!Object.keys(valores).length){ alert("No ingresaste ningún dato."); return; }
-    e.evaluaciones.push({id: uid(), fecha: fecha, valores: valores});
+    if(ev){
+      ev.valores = valores;
+    } else {
+      e.evaluaciones.push({id: uid(), fecha: fecha, valores: valores});
+    }
     guardar();
-    alert("Evaluación guardada: "+Object.keys(valores).length+" parcelas con datos.");
+    alert((ev?"Evaluación actualizada: ":"Evaluación guardada: ")+Object.keys(valores).length+" parcelas con datos.");
     vista = null; render();
   });
 }
